@@ -95,7 +95,7 @@ export class FingerprintAuth implements FingerprintAuthApi {
 	}
 
 	// Following: https://developer.android.com/training/sign-in/biometric-auth#java as a guide
-	verifyFingerprint(options: VerifyFingerprintOptions, pinFallback: boolean = false): Promise<void | string> {
+	verifyFingerprint(options: VerifyFingerprintWithCustomFallbackOptions, pinFallback: boolean = false): Promise<void | string> {
 		return new Promise((resolve, reject) => {
 			try {
 				if (!this.keyguardManager) {
@@ -114,10 +114,13 @@ export class FingerprintAuth implements FingerprintAuthApi {
 
 				FingerprintAuth.generateSecretKey();
 
-				const cipher = this.getCipher();
-				const secretKey = this.getSecretKey();
-				cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey);
-				const cryptoObject = new (<any>androidx).biometric.BiometricPrompt.CryptoObject(cipher);
+				let cryptoObject: any;
+				if (android.os.Build.VERSION.SDK_INT >= 30) {
+					const cipher = this.getCipher();
+					const secretKey = this.getSecretKey();
+					cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey);
+					cryptoObject = new (<any>androidx).biometric.BiometricPrompt.CryptoObject(cipher);
+				}
 
 				const executor = (<any>androidx).core.content.ContextCompat.getMainExecutor(Utils.android.getApplicationContext());
 				let authCallback = new AuthenticationCallback();
@@ -135,7 +138,11 @@ export class FingerprintAuth implements FingerprintAuthApi {
 						.setAllowedAuthenticators((<any>androidx).biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG | (<any>androidx).biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL) // PIN Fallback or Cancel
 						.build();
 
-					this.biometricPrompt.authenticate(info, cryptoObject);
+					if (cryptoObject) {
+						this.biometricPrompt.authenticate(info, cryptoObject);
+					} else {
+						this.biometricPrompt.authenticate(info);
+					}
 				} else {
 					const info = new (<any>androidx).biometric.BiometricPrompt.PromptInfo.Builder()
 						.setTitle(options.title ? options.title : "Login")
@@ -146,7 +153,11 @@ export class FingerprintAuth implements FingerprintAuthApi {
 						.setAllowedAuthenticators((<any>androidx).biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) // PIN Fallback or Cancel
 						.build();
 
-					this.biometricPrompt.authenticate(info, cryptoObject);
+					if (cryptoObject) {
+						this.biometricPrompt.authenticate(info, cryptoObject);
+					} else {
+						this.biometricPrompt.authenticate(info);
+					}
 				}
 			} catch (ex) {
 				console.log(`Error in fingerprint-auth.verifyFingerprint: ${ex}`);
